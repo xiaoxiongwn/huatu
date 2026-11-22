@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>三层按钮与绘图</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f1ea;--sf:#fff;--tx:#23211d;--mu:#7a746a;--ac:#b5462b;--bd:#d9d3c7;--dg:#c0272d}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1b19;--sf:#2a2825;--tx:#ece8df;--mu:#9d968a;--ac:#e0704f;--bd:#45413a;--dg:#ef5b5b}}
+html,body{height:100%;margin:0}*,*:before,*:after{box-sizing:inherit}
+body{background:var(--bg);color:var(--tx);font:15px/1.4 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bd);background:var(--sf)}
+header .crumb{flex:1;color:var(--mu);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+header b{color:var(--tx)}
+button,select,input{font:inherit;color:var(--tx)}
+.b{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+.b:hover{border-color:var(--ac)}.b.on{background:var(--ac);color:#fff;border-color:var(--ac)}.b.dg.on{background:var(--dg);border-color:var(--dg)}
+.b:disabled{opacity:.4;cursor:not-allowed}
+#bar{display:flex;gap:8px;padding:10px 14px;flex-wrap:wrap}
+#list{flex:1;overflow:auto;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:16px}
+.row{display:flex;justify-content:center;gap:16px}
+.card{width:22%;min-width:120px;max-width:260px;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--sf);border:2px solid var(--bd);border-radius:14px;padding:10px;cursor:pointer;text-align:center;word-break:break-all}
+.card:hover{border-color:var(--ac)}.card.del{border-color:var(--dg);border-style:dashed}
+.card input[type=text]{width:100%;text-align:center;border:1px solid var(--bd);background:var(--bg);border-radius:6px;padding:4px}
+.card .ct{display:flex;gap:6px;align-items:center}
+.empty{text-align:center;color:var(--mu)}
+#ed{flex:1;display:none;flex-direction:column;min-height:0}
+#tb{display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap;align-items:center;background:var(--sf);border-bottom:1px solid var(--bd)}
+#tb .sep{width:1px;height:22px;background:var(--bd)}
+#tb input[type=color]{width:30px;height:30px;padding:0;border:1px solid var(--bd);border-radius:6px;background:none}
+#tb input[type=number]{width:54px;padding:4px;border:1px solid var(--bd);border-radius:6px;background:var(--bg)}
+#lib{display:flex;gap:6px;padding:6px 12px;flex-wrap:wrap;border-bottom:1px solid var(--bd);font-size:13px;color:var(--mu)}
+#cv{flex:1;min-height:0;position:relative}canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;background:#fff}
+#hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:#666;background:rgba(255,255,255,.85);padding:2px 8px;border-radius:6px;pointer-events:none}
+.hide{display:none!important}
+</style></head><body>
+<header><button class="b" id="back">← 返回</button><div class="crumb" id="crumb"></div><button class="b" id="lock"></button></header>
+<div id="bar"><button class="b" id="add">＋ 增加</button><button class="b dg" id="rm">删除</button><button class="b" id="edit">编辑文字</button><button class="b" id="bk">备份数据</button><button class="b" id="rs">恢复数据</button><button class="b" id="pw">修改密码</button></div>
+<div id="list"></div>
+<div id="ed">
+ <div id="tb"></div><div id="lib"></div>
+ <div id="cv"><canvas id="c"></canvas><div id="hint"></div></div>
+</div>
+<input type="file" id="file" accept="image/*,.dxf,.json" class="hide"><input type="file" id="file2" accept=".json" class="hide">
+<script>
+const $=s=>document.querySelector(s),uid=()=>Math.random().toString(36).slice(2,9);
+function dlg(msg,o={}){return new Promise(res=>{const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99';const bx=document.createElement('div');bx.style.cssText='background:var(--sf);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:18px;min-width:260px;max-width:90%';const t=document.createElement('div');t.style.cssText='margin-bottom:10px;white-space:pre-wrap';t.textContent=msg;bx.appendChild(t);let inp=null;if(o.input!=null){inp=document.createElement('input');inp.type=o.pw?'password':'text';inp.value=o.input;inp.style.cssText='width:100%;padding:6px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);margin-bottom:10px';bx.appendChild(inp)}const r=document.createElement('div');r.style.cssText='display:flex;gap:8px;justify-content:flex-end';const done=v=>{m.remove();res(v)};if(!o.noCancel){const c=document.createElement('button');c.className='b';c.textContent='取消';c.onclick=()=>done(inp?null:false);r.appendChild(c)}const k=document.createElement('button');k.className='b on';k.textContent='确定';k.onclick=()=>done(inp?inp.value:true);r.appendChild(k);bx.appendChild(r);m.appendChild(bx);document.body.appendChild(m);if(inp){inp.focus();inp.onkeydown=e=>{if(e.key=='Enter')k.click()}}else k.focus()})}
+const aAlert=m=>dlg(m,{noCancel:1}),aConfirm=m=>dlg(m),aPrompt=(m,v,pw)=>dlg(m,{input:v||'',pw});window.alert=aAlert;
+let db=null;try{db=JSON.parse(localStorage.getItem('l3app'))}catch(e){}
+if(!db)db={root:[],lib:[],pw:'1234'};
+const save=()=>{try{localStorage.setItem('l3app',JSON.stringify(db))}catch(e){alert('浏览器存储已满，请先导出')}};
+let path=[],unlocked=false,mode='';
+const COLORS=['#23211d'];
+function ctxNodes(){let arr=db.root,n=null;for(const id of path){n=arr.find(x=>x.id==id);arr=n.children}return{n,arr}}
+async function auth(cb){if(unlocked)return cb();const p=await aPrompt('请输入编辑权限密码（默认 1234）','',1);if(p===null)return;if(p===db.pw){unlocked=true;refresh();cb()}else alert('密码错误')}
+$('#lock').onclick=()=>{if(unlocked){unlocked=false;mode='';refresh()}else auth(()=>{})};
+function refresh(){
+ $('#lock').textContent=unlocked?'🔓 编辑中（点击锁定）':'🔒 仅查看（点击解锁）';
+ const lv=path.length+1;const names=['首页',...path.map(id=>'')];
+ let t='第 '+lv+' 层';const bits=[];let arr=db.root;for(const id of path){const n=arr.find(x=>x.id==id);bits.push(n.text);arr=n.children}
+ $('#crumb').innerHTML='<b>'+t+'</b>'+(bits.length?' · '+bits.map(esc).join(' › '):'');
+ $('#back').style.visibility=path.length?'visible':'hidden';
+ const inEd=path.length==2;$('#bar').classList.toggle('hide',inEd||false);$('#list').style.display=inEd?'none':'flex';$('#ed').style.display=inEd?'flex':'none';
+ $('#rm').classList.toggle('on',mode=='del');$('#edit').classList.toggle('on',mode=='edit');
+ if(inEd)enterEditor();else renderList();
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderList(){
+ const{arr}=ctxNodes(),L=$('#list');L.innerHTML='';
+ if(!arr.length){L.innerHTML='<div class="empty">还没有按钮。解锁后点击“增加”。</div>';return}
+ for(let i=0;i<arr.length;i+=4){
+  const r=document.createElement('div');r.className='row';
+  arr.slice(i,i+4).forEach(n=>{
+   const c=document.createElement('div');c.className='card'+(mode=='del'?' del':'');
+   if(mode=='edit'){
+    c.style.cursor='default';
+    c.innerHTML='<input type="text" value="'+esc(n.text)+'"><div class="ct"><input type="color" value="'+n.color+'"><input type="number" min="10" max="80" value="'+n.size+'" style="width:56px"></div>';
+    const [ti,ci,si]=c.querySelectorAll('input');
+    ti.oninput=()=>{n.text=ti.value;save()};ci.oninput=()=>{n.color=ci.value;save()};si.oninput=()=>{n.size=Math.max(10,Math.min(80,+si.value||20));save()};
+   }else{
+    c.innerHTML='<span style="color:'+n.color+';font-size:'+n.size+'px">'+esc(n.text)+'</span>';
+    c.onclick=async()=>{if(mode=='del'){if(await aConfirm('删除“'+n.text+'”及其下所有内容？')){arr.splice(arr.indexOf(n),1);save();refresh()}}else{path.push(n.id);refresh()}};
+   }
+   r.appendChild(c)});
+  L.appendChild(r)}
+}
+$('#add').onclick=()=>auth(()=>{const{arr}=ctxNodes();arr.push({id:uid(),text:'按钮',color:COLORS[0],size:22,children:[],draw:[]});mode='edit';save();refresh()});
+$('#rm').onclick=()=>auth(()=>{mode=mode=='del'?'':'del';refresh()});
+$('#edit').onclick=()=>auth(()=>{mode=mode=='edit'?'':'edit';refresh()});
+$('#back').onclick=()=>{path.pop();mode='';refresh()};
+$('#bk').onclick=()=>dl('备份.json',new Blob([JSON.stringify(db)],{type:'application/json'}));
+$('#rs').onclick=()=>auth(()=>$('#file2').click());
+$('#file2').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(async t=>{try{const j=JSON.parse(t);if(!Array.isArray(j.root))throw 0;if(!await aConfirm('恢复将覆盖当前所有按钮和图形，确定吗？'))return;db={root:j.root,lib:j.lib||[],pw:j.pw||db.pw};save();path=[];mode='';refresh()}catch(x){aAlert('不是有效的备份文件')}})};
+$('#pw').onclick=()=>auth(async()=>{const a=await aPrompt('输入新密码','',1);if(a){db.pw=a;save();aAlert('密码已修改')}});
+
+/* ============ 绘图编辑器 ============ */
+const cv=$('#c'),cx=cv.getContext('2d');
+const E={objs:[],sel:[],tool:'select',v:{x:0,y:0,k:1},hist:[],node:null,drag:null};
+const P={stroke:'#1a1a1a',fill:'#ffe9a8',useFill:false,w:2,size:24};
+const imgs={};
+const TOOLS=[['select','选择'],['pen','画笔'],['line','直线'],['rect','方形'],['ellipse','圆/椭圆'],['arrow','箭头'],['text','文字'],['pan','平移']];
+function buildTb(){
+ const tb=$('#tb');let h='';
+ if(unlocked){
+  h+=TOOLS.map(([k,n])=>'<button class="b'+(E.tool==k?' on':'')+'" data-t="'+k+'">'+n+'</button>').join('');
+  h+='<span class="sep"></span>线/字颜色<input type="color" id="pS" value="'+P.stroke+'">填充色<input type="color" id="pF" value="'+P.fill+'"><label><input type="checkbox" id="pU"'+(P.useFill?' checked':'')+'>填充</label>粗<input type="number" id="pW" min="1" max="40" value="'+P.w+'">字号<input type="number" id="pZ" min="8" max="200" value="'+P.size+'">';
+  h+='<span class="sep"></span><button class="b" id="undo">撤销</button><button class="b" id="delo">删除所选</button><button class="b" id="saveShape">存为图形</button><button class="b" id="imp">导入图片/DXF/项目</button>';
+ }else h+='<span style="color:var(--mu)">查看模式：可缩放、平移、导出，不能修改。点右上角解锁后编辑。</span>';
+ h+='<span class="sep"></span><button class="b" id="fit">适应画面</button><button class="b" id="expP">导出PNG</button><button class="b" id="expJ">导出项目</button>';
+ tb.innerHTML=h;
+ tb.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{E.tool=b.dataset.t;buildTb()});
+ const g=id=>$('#'+id);
+ if(unlocked){
+  const ap=()=>{E.sel.forEach(i=>{const o=E.objs[i];if(o.t=='text'){o.stroke=P.stroke;o.size=P.size}else{o.stroke=P.stroke;o.fill=P.useFill?P.fill:null;o.w=P.w}});if(E.sel.length)commit();draw()};
+  g('pS').oninput=e=>{P.stroke=e.target.value;ap()};g('pF').oninput=e=>{P.fill=e.target.value;P.useFill=true;g('pU').checked=true;ap()};
+  g('pU').onchange=e=>{P.useFill=e.target.checked;ap()};g('pW').oninput=e=>{P.w=+e.target.value||2;ap()};g('pZ').oninput=e=>{P.size=+e.target.value||24;ap()};
+  g('undo').onclick=undo;g('delo').onclick=delSel;g('saveShape').onclick=saveShape;g('imp').onclick=()=>$('#file').click();
+ }
+ g('fit').onclick=fit;g('expP').onclick=exportPNG;g('expJ').onclick=()=>dl('项目.json',new Blob([JSON.stringify({objs:E.objs})],{type:'application/json'}));
+ const lb=$('#lib');lb.classList.toggle('hide',!unlocked);
+ lb.innerHTML='自建图形库：'+(db.lib.length?'':'（空，选中图形后点“存为图形”）');
+ db.lib.forEach((s,i)=>{const b=document.createElement('button');b.className='b';b.textContent=s.name;b.title='点击插入；右键删除';b.onclick=()=>insertShape(s);b.oncontextmenu=async e=>{e.preventDefault();if(await aConfirm('从图形库删除“'+s.name+'”？')){db.lib.splice(i,1);save();buildTb()}};lb.appendChild(b)});
+ $('#hint').textContent=unlocked?'滚轮缩放 · 空格/中键拖动平移 · Shift多选 · Delete删除 · 图形库按钮右键可删除':'滚轮缩放 · 拖动平移';
+}
+function enterEditor(){
+ const{n}=ctxNodes();E.node=n;E.objs=n.draw||(n.draw=[]);E.sel=[];E.hist=[JSON.stringify(E.objs)];E.tool='select';
+ buildTb();requestAnimationFrame(()=>{resize();if(!E.fitted||E.fitted!=n.id){fit();E.fitted=n.id}draw()});
+}
+function commit(){E.node.draw=E.objs;E.hist.push(JSON.stringify(E.objs));if(E.hist.length>60)E.hist.shift();save()}
+function undo(){if(E.hist.length<2)return;E.hist.pop();E.objs=JSON.parse(E.hist[E.hist.length-1]);E.node.draw=E.objs;E.sel=[];save();draw()}
+function delSel(){if(!E.sel.length)return;E.objs=E.objs.filter((_,i)=>!E.sel.includes(i));E.sel=[];commit();draw()}
+function resize(){const r=cv.parentElement.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;draw()}
+addEventListener('resize',()=>{if(path.length==2)resize()});
+function getImg(o){if(!imgs[o.id]){const i=new Image();i.onload=()=>draw();i.src=o.src;imgs[o.id]=i}return imgs[o.id]}
+function bbox(o){
+ if(o.t=='poly'){let a=o.pts.map(p=>p[0]),b=o.pts.map(p=>p[1]);return[Math.min(...a),Math.min(...b),Math.max(...a),Math.max(...b)]}
+ if(o.t=='text'){cx.font=o.size+'px sans-serif';const w=Math.max(...o.text.split('\n').map(s=>cx.measureText(s).width));return[o.x1,o.y1,o.x1+w,o.y1+o.size*1.25*o.text.split('\n').length]}
+ return[Math.min(o.x1,o.x2),Math.min(o.y1,o.y2),Math.max(o.x1,o.x2),Math.max(o.y1,o.y2)]}
+function renderObj(c,o){
+ c.strokeStyle=o.stroke||'#000';c.fillStyle=o.fill||'transparent';c.lineWidth=o.w||2;c.lineJoin='round';c.lineCap='round';
+ c.beginPath();
+ if(o.t=='line'||o.t=='arrow'){c.moveTo(o.x1,o.y1);c.lineTo(o.x2,o.y2);c.stroke();
+  if(o.t=='arrow'){const a=Math.atan2(o.y2-o.y1,o.x2-o.x1),h=10+(o.w||2)*2;c.beginPath();c.moveTo(o.x2,o.y2);c.lineTo(o.x2-h*Math.cos(a-.4),o.y2-h*Math.sin(a-.4));c.moveTo(o.x2,o.y2);c.lineTo(o.x2-h*Math.cos(a+.4),o.y2-h*Math.sin(a+.4));c.stroke()}}
+ else if(o.t=='rect'){c.rect(o.x1,o.y1,o.x2-o.x1,o.y2-o.y1);if(o.fill)c.fill();c.stroke()}
+ else if(o.t=='ellipse'){c.ellipse((o.x1+o.x2)/2,(o.y1+o.y2)/2,Math.abs(o.x2-o.x1)/2||.1,Math.abs(o.y2-o.y1)/2||.1,0,0,7);if(o.fill)c.fill();c.stroke()}
+ else if(o.t=='poly'){o.pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));if(o.closed)c.closePath();if(o.fill&&o.closed)c.fill();c.stroke()}
+ else if(o.t=='text'){c.fillStyle=o.stroke;c.font=o.size+'px sans-serif';c.textBaseline='top';o.text.split('\n').forEach((s,i)=>c.fillText(s,o.x1,o.y1+i*o.size*1.25))}
+ else if(o.t=='img'){const i=getImg(o);if(i.complete&&i.naturalWidth)c.drawImage(i,o.x1,o.y1,o.x2-o.x1,o.y2-o.y1)}
+}
+function draw(){
+ const d=devicePixelRatio||1,v=E.v;cx.setTransform(1,0,0,1,0,0);cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);
+ cx.setTransform(d*v.k,0,0,d*v.k,d*v.x,d*v.y);
+ E.objs.forEach(o=>renderObj(cx,o));
+ cx.lineWidth=1/v.k;cx.setLineDash([5/v.k,4/v.k]);cx.strokeStyle='#2a7de1';
+ E.sel.forEach(i=>{const o=E.objs[i];if(!o)return;const b=bbox(o);cx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1])});
+ cx.setLineDash([]);
+ if(E.sel.length==1&&unlocked){const o=E.objs[E.sel[0]];if(hasHandle(o)){const h=hpos(o),s=7/v.k;cx.fillStyle='#2a7de1';cx.fillRect(h[0]-s/2,h[1]-s/2,s,s)}}
+}
+function syncP(){const o=E.objs[E.sel[E.sel.length-1]];if(!o)return;P.stroke=o.stroke||P.stroke;if(o.t=='text')P.size=Math.round(o.size);else if(o.t!='img'){P.w=o.w||P.w;P.useFill=!!o.fill;if(o.fill)P.fill=o.fill}const s=(id,k,v)=>{const el=$('#'+id);if(el)el[k]=v};s('pS','value',P.stroke);s('pF','value',P.fill);s('pU','checked',P.useFill);s('pW','value',P.w);s('pZ','value',P.size)}
+const hasHandle=o=>['line','arrow','rect','ellipse','img'].includes(o.t),hpos=o=>[o.x2,o.y2];
+function fit(){
+ const r=cv.getBoundingClientRect();let b=null;
+ E.objs.forEach(o=>{const q=bbox(o);b=b?[Math.min(b[0],q[0]),Math.min(b[1],q[1]),Math.max(b[2],q[2]),Math.max(b[3],q[3])]:q});
+ if(!b){E.v={x:0,y:0,k:1}}else{const w=b[2]-b[0]||1,h=b[3]-b[1]||1,k=Math.min((r.width-60)/w,(r.height-60)/h,4);E.v={k,x:(r.width-w*k)/2-b[0]*k,y:(r.height-h*k)/2-b[1]*k}}
+ draw()}
+const wp=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-E.v.x)/E.v.k,(e.clientY-r.top-E.v.y)/E.v.k]};
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,f=e.deltaY<0?1.12:1/1.12,v=E.v,k=Math.max(.02,Math.min(80,v.k*f));
+ v.x=mx-(mx-v.x)*k/v.k;v.y=my-(my-v.y)*k/v.k;v.k=k;draw()},{passive:false});
+let space=false;
+addEventListener('keydown',e=>{if(path.length!=2||/INPUT|TEXTAREA/.test(e.target.tagName))return;if(e.code=='Space'){space=true;e.preventDefault()}
+ if(unlocked&&(e.key=='Delete'||e.key=='Backspace'))delSel();if(unlocked&&e.key=='z'&&(e.ctrlKey||e.metaKey))undo()});
+addEventListener('keyup',e=>{if(e.code=='Space')space=false});
+function distSeg(p,a,b,c,d){const dx=c-a,dy=d-b,l=dx*dx+dy*dy||1;let t=Math.max(0,Math.min(1,((p[0]-a)*dx+(p[1]-b)*dy)/l));return Math.hypot(p[0]-a-t*dx,p[1]-b-t*dy)}
+function hit(p){const tol=6/E.v.k;
+ for(let i=E.objs.length-1;i>=0;i--){const o=E.objs[i];
+  if(o.t=='line'||o.t=='arrow'){if(distSeg(p,o.x1,o.y1,o.x2,o.y2)<tol)return i}
+  else if(o.t=='poly'){for(let j=1;j<o.pts.length;j++)if(distSeg(p,...o.pts[j-1],...o.pts[j])<tol)return i}
+  else{const b=bbox(o);if(p[0]>=b[0]-tol&&p[0]<=b[2]+tol&&p[1]>=b[1]-tol&&p[1]<=b[3]+tol)return i}}return -1}
+function mv(o,dx,dy){if(o.t=='poly')o.pts=o.pts.map(q=>[q[0]+dx,q[1]+dy]);else{o.x1+=dx;o.y1+=dy;if(o.x2!=null){o.x2+=dx;o.y2+=dy}}}
+cv.addEventListener('pointerdown',e=>{
+ cv.setPointerCapture(e.pointerId);const p=wp(e),pan={m:'pan',sx:e.clientX,sy:e.clientY,ox:E.v.x,oy:E.v.y};
+ if(!unlocked||E.tool=='pan'||space||e.button==1){E.drag=pan;return}
+ const t=E.tool;
+ if(t=='select'){
+  if(E.sel.length==1){const o=E.objs[E.sel[0]];if(hasHandle(o)){const h=hpos(o);if(Math.hypot(p[0]-h[0],p[1]-h[1])<10/E.v.k){E.drag={m:'rs',o};return}}}
+  const i=hit(p);
+  if(i<0){E.sel=[];E.drag=pan;draw();return}
+  if(e.shiftKey){E.sel=E.sel.includes(i)?E.sel.filter(x=>x!=i):[...E.sel,i]}else if(!E.sel.includes(i))E.sel=[i];syncP();
+  E.drag={m:'mv',last:p,moved:false};draw();return}
+ if(t=='text'){const hi=hit(p);if(hi>=0&&E.objs[hi].t=='text'){E.tool='select';buildTb();E.sel=[hi];E.drag={m:'mv',last:p,moved:false};draw();return}aPrompt('输入文字（可换行用 \\n）').then(s=>{if(s){E.objs.push({id:uid(),t:'text',x1:p[0],y1:p[1],text:s.replace(/\\n/g,'\n'),size:P.size,stroke:P.stroke});E.sel=[E.objs.length-1];E.tool='select';buildTb();commit();draw()}});return}
+ if(t=='pen'){const o={id:uid(),t:'poly',pts:[p],closed:false,stroke:P.stroke,w:P.w};E.objs.push(o);E.drag={m:'pen',o};return}
+ const o={id:uid(),t,x1:p[0],y1:p[1],x2:p[0],y2:p[1],stroke:P.stroke,fill:(t=='rect'||t=='ellipse')&&P.useFill?P.fill:null,w:P.w};
+ E.objs.push(o);E.drag={m:'new',o}});
+cv.addEventListener('pointermove',e=>{const d=E.drag;if(!d)return;const p=wp(e);
+ if(d.m=='pan'){E.v.x=d.ox+e.clientX-d.sx;E.v.y=d.oy+e.clientY-d.sy}
+ else if(d.m=='mv'){E.sel.forEach(i=>mv(E.objs[i],p[0]-d.last[0],p[1]-d.last[1]));d.last=p;d.moved=true}
+ else if(d.m=='rs'){d.o.x2=p[0];d.o.y2=p[1];d.moved=true}
+ else if(d.m=='new'){d.o.x2=p[0];d.o.y2=p[1]}
+ else if(d.m=='pen')d.o.pts.push(p);
+ draw()});
+cv.addEventListener('pointerup',()=>{const d=E.drag;E.drag=null;if(!d)return;
+ if(d.m=='new'){const o=d.o;if(Math.hypot(o.x2-o.x1,o.y2-o.y1)<3/E.v.k){E.objs.pop()}else{if(['rect','ellipse'].includes(o.t))norm(o);E.sel=[E.objs.length-1];commit()}}
+ else if(d.m=='pen'){if(d.o.pts.length<2)E.objs.pop();else{E.sel=[E.objs.length-1];commit()}}
+ else if((d.m=='mv'||d.m=='rs')&&d.moved){if(d.o&&['rect','ellipse','img'].includes(d.o.t))norm(d.o);commit()}
+ draw()});
+function norm(o){[o.x1,o.x2]=[Math.min(o.x1,o.x2),Math.max(o.x1,o.x2)];[o.y1,o.y2]=[Math.min(o.y1,o.y2),Math.max(o.y1,o.y2)]}
+cv.addEventListener('dblclick',e=>{if(!unlocked)return;const i=hit(wp(e));if(i>=0&&E.objs[i].t=='text'){aPrompt('修改文字',E.objs[i].text).then(s=>{if(s!==null){E.objs[i].text=s;commit();draw()}})}});
+
+/* 图形库 */
+async function saveShape(){if(!E.sel.length)return alert('请先选中要保存的图形（Shift可多选）');const n=await aPrompt('给这个图形起个名字');if(!n)return;
+ const objs=JSON.parse(JSON.stringify(E.sel.map(i=>E.objs[i])));let mx=1e9,my=1e9;objs.forEach(o=>{const b=bbox(o);mx=Math.min(mx,b[0]);my=Math.min(my,b[1])});objs.forEach(o=>mv(o,-mx,-my));
+ db.lib.push({name:n,objs});save();buildTb()}
+function insertShape(s){const r=cv.getBoundingClientRect(),c=[(r.width/2-E.v.x)/E.v.k,(r.height/2-E.v.y)/E.v.k],objs=JSON.parse(JSON.stringify(s.objs));
+ objs.forEach(o=>{o.id=uid();mv(o,c[0]-50,c[1]-50);E.objs.push(o)});E.sel=objs.map((_,i)=>E.objs.length-objs.length+i);commit();draw()}
+
+/* 导入 */
+$('#file').onchange=e=>{[...e.target.files].forEach(importFile);e.target.value=''};
+cv.addEventListener('dragover',e=>e.preventDefault());cv.addEventListener('drop',e=>{e.preventDefault();if(unlocked)[...e.dataTransfer.files].forEach(importFile)});
+function importFile(f){
+ const n=f.name.toLowerCase();
+ if(f.type.startsWith('image/')){const rd=new FileReader();rd.onload=()=>{const i=new Image();i.onload=()=>{const r=cv.getBoundingClientRect(),k=Math.min(1,(r.width*.5/E.v.k)/i.naturalWidth),w=i.naturalWidth*k,h=i.naturalHeight*k,cxw=(r.width/2-E.v.x)/E.v.k,cyw=(r.height/2-E.v.y)/E.v.k;
+  E.objs.push({id:uid(),t:'img',src:rd.result,x1:cxw-w/2,y1:cyw-h/2,x2:cxw+w/2,y2:cyw+h/2});E.sel=[E.objs.length-1];commit();draw()};i.src=rd.result};rd.readAsDataURL(f)}
+ else if(n.endsWith('.json')){f.text().then(t=>{try{const j=JSON.parse(t);if(!Array.isArray(j.objs))throw 0;j.objs.forEach(o=>{o.id=uid();E.objs.push(o)});commit();fit()}catch(x){alert('不是有效的项目文件')}})}
+ else if(n.endsWith('.dxf')){f.text().then(t=>{const o=parseDXF(t);if(!o.length)return alert('没有读到可用图元（仅支持 LINE/CIRCLE/ARC/POLYLINE/TEXT）');o.forEach(x=>E.objs.push(x));commit();fit()})}
+ else if(n.endsWith('.dwg'))alert('暂不能直接读取 DWG。请在 CAD 中“另存为 DXF”后再导入。')
+ else alert('不支持的文件类型')}
+function parseDXF(t){
+ const L=t.split(/\r?\n/),pr=[];for(let i=0;i+1<L.length;i+=2)pr.push([parseInt(L[i]),L[i+1].trim()]);
+ let s=pr.findIndex((p,i)=>p[0]==2&&p[1]=='ENTITIES');if(s<0)return[];
+ const ents=[];let cur=null;
+ for(let i=s;i<pr.length;i++){const[c,v]=pr[i];if(c==0){if(v=='ENDSEC')break;cur={type:v,d:[]};ents.push(cur)}else if(cur)cur.d.push([c,v])}
+ const out=[],Y=y=>-y,st='#1a1a1a';let lastPoly=null;
+ const g=(en,c)=>{const r=en.d.find(p=>p[0]==c);return r?parseFloat(r[1]):0};
+ ents.forEach(en=>{
+  if(en.type=='LINE')out.push({t:'line',x1:g(en,10),y1:Y(g(en,20)),x2:g(en,11),y2:Y(g(en,21))});
+  else if(en.type=='CIRCLE'){const x=g(en,10),y=Y(g(en,20)),r=g(en,40);out.push({t:'ellipse',x1:x-r,y1:y-r,x2:x+r,y2:y+r})}
+  else if(en.type=='ARC'){const x=g(en,10),y=g(en,20),r=g(en,40);let a=g(en,50)*Math.PI/180,b=g(en,51)*Math.PI/180;if(b<=a)b+=2*Math.PI;const pts=[];for(let k=0;k<=24;k++){const q=a+(b-a)*k/24;pts.push([x+r*Math.cos(q),Y(y+r*Math.sin(q))])}out.push({t:'poly',pts,closed:false})}
+  else if(en.type=='LWPOLYLINE'){const pts=[];let x=null;en.d.forEach(([c,v])=>{if(c==10)x=parseFloat(v);else if(c==20&&x!=null){pts.push([x,Y(parseFloat(v))]);x=null}});if(pts.length>1)out.push({t:'poly',pts,closed:(g(en,70)&1)==1})}
+  else if(en.type=='POLYLINE'){lastPoly={t:'poly',pts:[],closed:(g(en,70)&1)==1};out.push(lastPoly)}
+  else if(en.type=='VERTEX'&&lastPoly)lastPoly.pts.push([g(en,10),Y(g(en,20))]);
+  else if(en.type=='TEXT'||en.type=='MTEXT'){const r=en.d.filter(p=>p[0]==1||p[0]==3).map(p=>p[1]).join('');const tx=r.replace(/\\[A-Za-z][^;]*;|[{}]/g,'').replace(/\\P/g,'\n');if(tx)out.push({t:'text',x1:g(en,10),y1:Y(g(en,20))-g(en,40),text:tx,size:g(en,40)||2.5})}});
+ const res=out.filter(o=>o.t!='poly'||o.pts.length>1);
+ let b=null;res.forEach(o=>{const q=bbox(o);b=b?[Math.min(b[0],q[0]),Math.min(b[1],q[1]),Math.max(b[2],q[2]),Math.max(b[3],q[3])]:q});
+ if(!b)return[];const f=1000/Math.max(b[2]-b[0],b[3]-b[1],1e-6);
+ res.forEach(o=>{o.id=uid();o.stroke=st;o.fill=null;o.w=1.5;if(o.t=='poly')o.pts=o.pts.map(p=>[(p[0]-b[0])*f,(p[1]-b[1])*f]);else{o.x1=(o.x1-b[0])*f;o.y1=(o.y1-b[1])*f;if(o.x2!=null){o.x2=(o.x2-b[0])*f;o.y2=(o.y2-b[1])*f}if(o.t=='text'){o.size*=f;o.stroke=st}}});
+ return res}
+
+/* 导出 */
+async function dl(name,blob){
+ let d=null;try{d=await claude.use('downloads')}catch(e){}
+ if(d){try{await d.save({filename:name,data:blob})}catch(e){if(e&&e.code!='declined')alert('导出失败：'+(e.message||e.code))}return}
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+function exportPNG(){
+ if(!E.objs.length)return alert('画面是空的');
+ let b=null;E.objs.forEach(o=>{const q=bbox(o);b=b?[Math.min(b[0],q[0]),Math.min(b[1],q[1]),Math.max(b[2],q[2]),Math.max(b[3],q[3])]:q});
+ const m=20,w=b[2]-b[0]+2*m,h=b[3]-b[1]+2*m,s=Math.min(2,4000/Math.max(w,h)),c=document.createElement('canvas');c.width=w*s;c.height=h*s;const x=c.getContext('2d');
+ x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.scale(s,s);x.translate(m-b[0],m-b[1]);E.objs.forEach(o=>renderObj(x,o));
+ c.toBlob(bl=>dl('绘图.png',bl),'image/png')}
+refresh();
+</script></body></html>

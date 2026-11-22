@@ -1,0 +1,15 @@
+{
+  "name": "layers-draw-app",
+  "version": "1.0.0",
+  "description": "三层按钮与绘图软件",
+  "author": "me",
+  "main": "main.js",
+  "scripts": { "start": "electron ." },
+  "devDependencies": { "electron": "33.2.0", "electron-builder": "25.1.8" },
+  "build": {
+    "appId": "com.local.layersdraw",
+    "productName": "三层按钮与绘图",
+    "files": ["main.js", "index.html"],
+    "win": { "target": "portable", "artifactName": "LayersDraw.exe" }
+  }
+}
